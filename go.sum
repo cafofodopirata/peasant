@@ -1,0 +1,4 @@
+github.com/candango/gopeasant v0.1.3 h1:OTsyP4OHd7FDx3+qD5K/bTivwmOQaOODce87prh/D2M=
+github.com/candango/gopeasant v0.1.3/go.mod h1:64HAN+hcWsKtAAtaSu04KOchZdTekVDg4Fj/l0IFQ3Q=
+github.com/candango/httpok v0.0.2 h1:w6XLpoZEshS36JPcrqWxX1D3cFN5dJOo2hDY3QhaVLc=
+github.com/candango/httpok v0.0.2/go.mod h1:nf0tAd+GqSP2ICKs97PLdmjaLQjm14o67Gy7EKf4OfA=
