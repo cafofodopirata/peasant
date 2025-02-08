@@ -4,7 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"testing"
+	"net/url"
+	"strings"
 
 	peasant "github.com/candango/gopeasant"
 )
@@ -17,87 +18,87 @@ func NewCafofoTransport(tr *peasant.HttpTransport) *CafofoTransport {
 	return &CafofoTransport{tr}
 }
 
-func (tt *CafofoTransport) Directory() (map[string]interface{}, error) {
-	path := fmt.Sprintf("%s/directory/", tt.Url)
-	fmt.Println(path)
-	req, err := http.NewRequest(http.MethodGet, path, nil)
+func (ct *CafofoTransport) Auth() error {
+	nonce, err := ct.NewNonce()
 	if err != nil {
-		return nil, err
-	}
-	res, err := tt.Client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode > 299 {
-		return nil, errors.New(res.Status)
-	}
-	var dir map[string]any
-	err = peasant.BodyAsJson(res, &dir)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return dir, nil
-}
-
-func (tt *CafofoTransport) NewNonceUrl() (string, error) {
-	d, err := tt.Directory()
+	d, err := ct.Directory()
 	if err != nil {
-		return "", err
-	}
-	return d["new-nonce"].(string), nil
-}
-
-func (tt *CafofoTransport) NewNonce() (string, error) {
-	url, err := tt.NewNonceUrl()
-	if err != nil {
-		return "", err
-	}
-	req, err := http.NewRequest(http.MethodHead, url, nil)
-	if err != nil {
-		return "", err
-	}
-	res, err := tt.Client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	if res.StatusCode > 299 {
-		return "", errors.New(res.Status)
-	}
-	return tt.ResolveNonce(res), nil
-}
-
-func (tt *CafofoTransport) DoSomething(t *testing.T) (string, error) {
-	nonce, err := tt.NewNonce()
-	if err != nil {
-		return "", err
+		return err
 	}
 
-	d, err := tt.Directory()
-	if err != nil {
-		return "", err
+	ds, ok := d["security"].(map[string]any)
+	if !(ok) {
+		return errors.New("error converting security directory")
 	}
 
-	req, err := http.NewRequest(http.MethodGet, d["doSomething"].(string), nil)
+	data := url.Values{}
+	secret := "secret correto"
+	data.Set("secret", secret)
+	req, err := http.NewRequest(http.MethodPost, ds["auth"].(string), strings.NewReader(data.Encode()))
 	if err != nil {
-		return "", err
+		return err
 	}
 	req.Header.Add("nonce", nonce)
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	res, err := tt.Client.Do(req)
+	res, err := ct.Client.Do(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	b, err := peasant.BodyAsString(res)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if res.StatusCode > 299 {
-		return "", errors.New(res.Status)
+		return errors.New(res.Status)
 	}
-	return b, nil
+	fmt.Println(b)
+	return nil
+}
+
+type CafofoDirectoryProvider struct {
+	directory map[string]any
+	url       string
+	http.Client
+}
+
+func NewCafofoDirectoryProvider(url string) *CafofoDirectoryProvider {
+	return &CafofoDirectoryProvider{url: url}
+}
+
+func (p *CafofoDirectoryProvider) Directory() (map[string]any, error) {
+	if p.directory == nil {
+		path := fmt.Sprintf("%s/directory/", p.GetUrl())
+		req, err := http.NewRequest(http.MethodGet, path, nil)
+		if err != nil {
+			return nil, err
+		}
+		res, err := p.Client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if res.StatusCode > 299 {
+			return nil, errors.New(res.Status)
+		}
+		var dir map[string]any
+		err = peasant.BodyAsJson(res, &dir)
+		if err != nil {
+			return nil, err
+		}
+		p.directory = dir
+	}
+
+	//TODO: Expire the directory
+	return p.directory, nil
+}
+
+func (p *CafofoDirectoryProvider) GetUrl() string {
+	return p.url
 }
 
 type CafofoPeasant struct {
@@ -106,8 +107,4 @@ type CafofoPeasant struct {
 
 func NewCandangoPesant(p peasant.Peasant) *CafofoPeasant {
 	return &CafofoPeasant{p}
-}
-
-func (p *CafofoPeasant) NewNonce(t *testing.T) (string, error) {
-	return p.Transport.(*CafofoTransport).DoSomething(t)
 }
